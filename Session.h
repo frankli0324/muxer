@@ -1,7 +1,3 @@
-//
-// Created by Frank Li on 2021/2/3.
-//
-
 #ifndef MUXER_SESSION_H
 #define MUXER_SESSION_H
 
@@ -15,8 +11,6 @@
 #include <boost/container_hash/hash.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
-
-#include <boost/compute/async/wait.hpp>
 
 namespace muxer {
     namespace ip = boost::asio::ip;

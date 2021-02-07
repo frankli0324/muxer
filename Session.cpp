@@ -18,7 +18,7 @@ namespace muxer {
             }
         }
         catch (boost::system::system_error &e) {
-            if (e.code().value() != 2)  //EOF
+            if (e.code().value() != boost::asio::error::eof)
                 throw;
         }
         stop();
@@ -45,6 +45,7 @@ namespace muxer {
             incoming.close();
         if (upstream.is_open())
             upstream.close();
-        sessions.erase(session_id);
+        if (sessions.find(session_id) != sessions.end())
+            sessions.erase(session_id);
     }
 }
