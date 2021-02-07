@@ -3,8 +3,9 @@
 
 #include <boost/asio.hpp>
 #include <boost/make_shared.hpp>
-#include <utility>
 
+#include "utils/utils.h"
+#include "utils/logger.h"
 #include "Session.h"
 #include "muxers/Muxer.h"
 
@@ -27,19 +28,23 @@ namespace muxer {
                 const string &local_host, ushort local_port,
                 boost::shared_ptr<muxers::Muxer> muxer)
                 : _context(context),
-                  _muxer(std::move(muxer)),
                   _acceptor(_context, ip::tcp::endpoint(
-                          ip::address::from_string(local_host), local_port)) {}
+                          ip::address::from_string(local_host), local_port)),
+                  _muxer(std::move(muxer)) {}
 
         awaitable<void> accept_connections() {
             while (!_context.stopped()) {
                 try {
                     auto ses = boost::make_shared<Session>(_context);
                     co_await _acceptor.async_accept(ses->incoming, use_awaitable);
+                    INFO << "new connection from " << ses->incoming.remote_endpoint();
                     co_await _muxer->mux(ses);
+                    INFO << "connected "
+                         << ses->incoming.remote_endpoint() << " to "
+                         << ses->upstream.remote_endpoint();
                     ses->start(_context);
                 } catch (std::exception &e) {
-                    std::cerr << "Ingress exception: " << e.what() << std::endl;
+                    WARNING << "Ingress: " << e.what() << std::endl;
                 }
             }
             co_return;
@@ -57,13 +62,14 @@ int main(int argc, char *argv[]) {
     signals.async_wait([&](auto, auto) { context.stop(); });
 
     try {
+        INFO << "muxer starting on " << local_host << ':' << local_port;
         auto muxer = boost::make_shared<muxer::muxers::HTTPMuxer>();
         muxer::Ingress ingress(context, local_host, local_port, muxer);
         boost::asio::co_spawn(context, ingress.accept_connections(), boost::asio::detached);
 
         context.run();
     } catch (std::exception &e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        FATAL << "unable to start muxer: " << e.what();
         return 1;
     }
 

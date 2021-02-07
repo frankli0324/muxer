@@ -13,7 +13,7 @@ namespace muxer {
                 std::size_t n = co_await in.async_read_some(boost::asio::buffer(
                         data, 8192
                 ), use_awaitable);
-                std::cout << "read " << n << " bytes" << std::endl;
+                DEBUG << in.remote_endpoint() << " -[" << n << "]> " << out.remote_endpoint();
                 co_await async_write(out, boost::asio::buffer(data, n), use_awaitable);
             }
         }
@@ -21,8 +21,16 @@ namespace muxer {
             if (e.code().value() != boost::asio::error::eof)
                 throw;
         }
-        stop();
-        std::cerr << "disconnected, remaining sessions: " << sessions.size() << std::endl;
+        catch (std::exception &e) {
+            ERROR << session_id << ": " << e.what() << std::endl;
+        }
+        try {
+            DEBUG << in.remote_endpoint() << " -[disconnect]> " << out.remote_endpoint();
+            stop();
+            DEBUG << "remaining sessions: " << sessions.size();
+        } catch (std::exception &e) {
+            ERROR << "error during session shutdown: " << e.what();
+        }
     }
 
     void Session::start(boost::asio::io_context &context) {
@@ -35,7 +43,7 @@ namespace muxer {
                      boost::asio::detached);
             sessions[session_id] = shared_from_this();
         } catch (std::exception &e) {
-            std::cerr << e.what() << std::endl;
+            ERROR << "error during session startup: " << e.what();
             stop();
         }
     }

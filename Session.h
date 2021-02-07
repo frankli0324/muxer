@@ -6,11 +6,16 @@
 #include <unordered_map>
 
 #include <boost/asio.hpp>
+
 #include <boost/shared_ptr.hpp>
 #include <boost/enable_shared_from_this.hpp>
+
 #include <boost/container_hash/hash.hpp>
 #include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_io.hpp>
 #include <boost/uuid/uuid_generators.hpp>
+
+#include "utils/logger.h"
 
 namespace muxer {
     namespace ip = boost::asio::ip;
@@ -35,7 +40,7 @@ namespace muxer {
         socket incoming, upstream;
 
         explicit Session(io_context &context) :
-                incoming(context), upstream(context), session_id(generator()) {}
+                session_id(generator()), incoming(context), upstream(context) {}
 
         void stop();
 

@@ -2,7 +2,7 @@
 #define MUXER_MUXER_H
 
 #include "../Session.h"
-#include "../utils.h"
+#include "../utils/utils.h"
 
 #include <boost/shared_ptr.hpp>
 #include <boost/asio.hpp>
@@ -16,7 +16,7 @@ namespace muxer::muxers {
     };
 
     class HTTPMuxer : public Muxer {
-        static std::string parse(const std::string &, const std::string);
+        static std::string parse(const std::string &, std::string);
 
         awaitable<void> mux(boost::shared_ptr<muxer::Session> &ses) final;
     };
