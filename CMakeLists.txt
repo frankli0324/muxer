@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.1)
 set(CMAKE_CXX_COMPILER "clang++")
 set(CMAKE_CXX_STANDARD 20)
 set(BOOST_MIN_VERSION 1.75)
+set(Boost_USE_STATIC_LIBS on)
 
 project(muxer)
 
@@ -13,7 +14,6 @@ message("** Boost Include: ${Boost_INCLUDE_DIR}")
 message("** Boost Libraries: ${Boost_LIBRARY_DIRS}")
 message("** Boost Libraries: ${Boost_LIBRARIES}")
 
-add_definitions(-DBOOST_LOG_DYN_LINK)
 include_directories(${Boost_INCLUDE_DIRS})
 link_libraries(${Boost_LIBRARIES} Threads::Threads)
 
