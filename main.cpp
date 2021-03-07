@@ -28,8 +28,11 @@ namespace muxer {
                 const string &local_host, ushort local_port,
                 boost::shared_ptr<muxers::Muxer> muxer)
                 : _context(context),
-                  _acceptor(_context, ip::tcp::endpoint(
-                          ip::address::from_string(local_host), local_port)),
+                  _acceptor(_context,
+                            ip::tcp::endpoint(
+                                    ip::address::from_string(local_host),
+                                    local_port
+                            ), true), // reuse addr
                   _muxer(std::move(muxer)) {}
 
         awaitable<void> accept_connections() {
@@ -54,8 +57,10 @@ namespace muxer {
 } // namespace muxer
 
 int main(int argc, char *argv[]) {
-    const std::string local_host = "0.0.0.0";
-    const ushort local_port = 2333;
+    auto args = muxer::utils::argparse(argc, argv, "ltp", "");
+    const std::string local_host = args['l'];
+    const ushort local_port = std::stoi(args['p']);
+    const std::string type = args['t'];
 
     boost::asio::io_context context;
     boost::asio::signal_set signals(context, SIGINT, SIGTERM);
@@ -63,7 +68,7 @@ int main(int argc, char *argv[]) {
 
     try {
         INFO << "muxer starting on " << local_host << ':' << local_port;
-        auto muxer = boost::make_shared<muxer::muxers::HTTPMuxer>();
+        auto muxer = muxer::muxers::getMuxer(type);
         muxer::Ingress ingress(context, local_host, local_port, muxer);
         boost::asio::co_spawn(context, ingress.accept_connections(), boost::asio::detached);
 

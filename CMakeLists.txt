@@ -25,4 +25,4 @@ add_link_options(-stdlib=libc++)
 add_executable(muxer
         main.cpp Session.h Session.cpp
         utils/utils.h utils/utils.cpp utils/logger.h utils/logger.cpp
-        muxers/HTTPMuxer.cpp muxers/Muxer.h)
+        muxers/HTTPMuxer.cpp muxers/SocksMuxer.cpp muxers/Muxer.h)

@@ -16,10 +16,19 @@ namespace muxer::muxers {
     };
 
     class HTTPMuxer : public Muxer {
-        static std::string parse(const std::string &, std::string);
+        static std::string parse(const std::string &, const std::string &);
 
         awaitable<void> mux(boost::shared_ptr<muxer::Session> &ses) final;
     };
 
+    class SocksMuxer : public Muxer {
+        awaitable<void> mux(boost::shared_ptr<muxer::Session> &ses) final;
+    };
+
+    static boost::shared_ptr<Muxer> getMuxer(const std::string &name) {
+        if (name == "http") return boost::make_shared<HTTPMuxer>();
+        if (name == "socks") return boost::make_shared<SocksMuxer>();
+        return nullptr;
+    }
 }
 #endif //MUXER_MUXER_H
