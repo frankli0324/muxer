@@ -1,7 +1,7 @@
 #include "Muxer.h"
 
 namespace muxer::muxers {
-    std::string HTTPMuxer::parse(const std::string &head, const std::string delimiter = "\r\n") {
+    std::string HTTPMuxer::parse(const std::string &head, const std::string &delimiter = "\r\n") {
         size_t last = 0, pos = 0;
         bool first = true;
         std::string token;

@@ -16,12 +16,10 @@ namespace muxer {
                 DEBUG << in.remote_endpoint() << " -[" << n << "]> " << out.remote_endpoint();
                 co_await async_write(out, boost::asio::buffer(data, n), use_awaitable);
             }
-        }
-        catch (boost::system::system_error &e) {
+        } catch (boost::system::system_error &e) {
             if (e.code().value() != boost::asio::error::eof)
                 throw;
-        }
-        catch (std::exception &e) {
+        } catch (std::exception &e) {
             ERROR << session_id << ": " << e.what() << std::endl;
         }
         try {
