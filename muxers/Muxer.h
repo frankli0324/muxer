@@ -7,6 +7,8 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/asio.hpp>
 
+#include <stdexcept>
+
 namespace muxer::muxers {
     namespace ip = boost::asio::ip;
 

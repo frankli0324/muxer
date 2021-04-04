@@ -6,17 +6,18 @@ enum CMD {
 enum ATYP {
     ipv4 = 1, domain = 3, ipv6 = 4
 };
-#define require(bytes) while (n < (bytes)) { \
-            n += co_await ses->incoming.async_read_some( \
-                    boost::asio::buffer(data + n, bytes - n), use_awaitable); \
-        }
 namespace muxer::muxers {
     using namespace boost::asio::ip;
 
+    class socks_error : public std::runtime_error {
+    public:
+        u_short code;
+
+        socks_error(u_short err, const char *msg) : runtime_error(msg), code(err) {}
+    };
+
     awaitable<ip::tcp::endpoint> get_address(ip::tcp::resolver resolver, short type, char *addr) {
-        char addr_s[64];
-        std::string addr_str = addr;
-        std::stringstream ss;
+        char addr_s[64], port_s[6];
         ip::address_v4::uint_type addr_v4 = 0;
 
         switch (type) {
@@ -30,67 +31,91 @@ namespace muxer::muxers {
                         addr[4] * 16 * 16 + addr[5]
                 );
             case ATYP::ipv6:
-                assert(false);
+                throw socks_error(0x08, "IPv6 Not Supported");
                 // what is "scope" for ipv6?
             case ATYP::domain:
-                ss << addr[addr[0] + 1] * 16 * 16 + addr[addr[0] + 2];
+                strncpy(addr_s, addr + 1, addr[0]);
+                sprintf(port_s, "%d", addr[addr[0] + 1] * 16 * 16 + addr[addr[0] + 2]);
                 co_return (co_await resolver.async_resolve(
-                        addr_str.substr(1, addr_str[0]), ss.str(),
-                        use_awaitable))->endpoint();
+                        addr_s, port_s, use_awaitable))->endpoint();
             default:
-                assert (false);
+                throw socks_error(0x08, "Incorrect Address Type");
         }
     }
 
-    void debug(int n, char *data) {
-        std::stringstream ss;
-        for (int i = 0; i < n; ++i)
-            ss << std::hex << (int) data[i] << " ";
-        DEBUG << ss.str();
-    }
+#define require(bytes) while (n < (bytes)) { \
+            n += co_await ses->incoming.async_read_some( \
+                    boost::asio::buffer(data + n, bytes - n), use_awaitable); \
+        }
 
-#undef assert
-
-    void assert(bool condition) {
-        if (!condition) throw std::exception();
-    }
 
     awaitable<void> SocksMuxer::mux(boost::shared_ptr<muxer::Session> &ses) {
         char data[4096];
         size_t n = co_await ses->incoming.async_read_some(
                 boost::asio::buffer(data, 4096), use_awaitable);
-        assert(n > 0 && data[0] == 0x05);
+        if (n <= 0 || data[0] != 0x05)
+            throw std::runtime_error("Incorrect SOCKS Version");
         size_t preferred_cnt = (u_char) data[1];
         require(preferred_cnt + 2);
         char *preferred = data + 2;
-        char resp[3] = "\x05\x00";
-        resp[1] = 0;
         co_await async_write(ses->incoming,
-                             boost::asio::buffer(resp, 2), use_awaitable);
-        require(preferred_cnt + 2 + 4);
-        char *request = preferred + preferred_cnt;
-        assert(request[0] == 0x05);
-        assert(request[1] == CMD::CONNECT);
-        assert(request[2] == 0x00);
-        switch (request[3]) {
-            case ATYP::ipv4:
-                require(preferred_cnt + 2 + 4 + 6);
-                break;
-            case ATYP::ipv6:
-                require(preferred_cnt + 2 + 4 + 18);
-                break;
-            case ATYP::domain:
-                require(preferred_cnt + 2 + 4 + 1);
-                require(preferred_cnt + 2 + 4 + 1 + request[4] + 2);
-                break;
+                             boost::asio::buffer("\x05\x00", 2), use_awaitable);
+        // negotiation success
+        int err_code = 0x00;
+        try {
+            require(preferred_cnt + 2 + 4);
+            char *request = preferred + preferred_cnt;
+            std::string err;
+            if (request[0] != 0x05)
+                throw socks_error(0x01, "Incorrect SOCKS Version");
+            if (request[1] != CMD::CONNECT)
+                throw socks_error(0x07, "Invalid SOCKS CMD (CONNECT only)");
+            if (request[2] != 0x00)
+                throw socks_error(0x01, "Incorrect Reserved Byte");
+
+            switch (request[3]) {
+                case ATYP::ipv4:
+                    require(preferred_cnt + 2 + 4 + 6);
+                    break;
+                case ATYP::ipv6:
+                    require(preferred_cnt + 2 + 4 + 18);
+                    break;
+                case ATYP::domain:
+                    require(preferred_cnt + 2 + 4 + 1);
+                    require(preferred_cnt + 2 + 4 + 1 + request[4] + 2);
+                    break;
+            }
+            auto target = co_await get_address(
+                    ip::tcp::resolver(ses->incoming.get_executor()),
+                    request[3], request + 4);
+            try {
+                co_await ses->upstream.async_connect(target, use_awaitable);
+            } catch (const boost::system::system_error &e) {
+                switch (e.code().value()) {
+                    case boost::asio::error::network_unreachable:
+                        throw socks_error(0x03, "Remote Network Unreachable");
+                    case boost::asio::error::host_unreachable:
+                        throw socks_error(0x04, "Remote Host Unreachable");
+                    case boost::asio::error::connection_refused:
+                        throw socks_error(0x05, "Remote Connection Refused");
+                    default:
+                        throw socks_error(0x01, "Remote Connection Error");
+                }
+            }
+        } catch (const socks_error &e) {
+            err_code = e.code;
+            ERROR << e.what();
         }
-        auto target = co_await get_address(
-                ip::tcp::resolver(ses->incoming.get_executor()),
-                request[3], request + 4);
-        co_await ses->upstream.async_connect(target, use_awaitable);
-        co_await async_write(ses->incoming, boost::asio::buffer(
-                "\x05\x00\x00\x01\x00\x00\x00\x00\x50"
-        ), use_awaitable);
+        char resp[] = "\x05\x00\x00\x01\x00\x00\x00\x00\x00\x50";
+        resp[1] = (char) err_code;
+        resp[8] = (char) (ses->incoming.local_endpoint().port() / 16 / 16);
+        resp[9] = (char) (ses->incoming.local_endpoint().port() - resp[8]);
+        co_await async_write(
+                ses->incoming,
+                boost::asio::buffer(resp, 10),
+                use_awaitable);
         co_return;
     }
+
+#undef require
 } // namespace muxer::muxers
